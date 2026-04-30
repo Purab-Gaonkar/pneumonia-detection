@@ -30,8 +30,14 @@ async def load_models():
         # Recreate feature extractor from ensemble model (MobileNetV2 branch)
         input_layer = tf.keras.Input(shape=(224, 224, 3))
         preprocess_mobilenet = tf.keras.applications.mobilenet_v2.preprocess_input(input_layer)
-        mobilenet = tf.keras.applications.MobileNetV2(weights='imagenet', include_top=False, input_tensor=preprocess_mobilenet)
-        x2 = tf.keras.layers.GlobalAveragePooling2D()(mobilenet.output)
+        
+        # Load the fine-tuned weights from the ensemble model
+        mobilenet_block = ensemble_model.get_layer('mobilenet_block')
+        mobilenet = tf.keras.applications.MobileNetV2(weights=None, include_top=False)
+        mobilenet.set_weights(mobilenet_block.get_weights())
+        
+        x2 = mobilenet(preprocess_mobilenet)
+        x2 = tf.keras.layers.GlobalAveragePooling2D()(x2)
         x2 = tf.keras.layers.Dropout(0.3)(x2)
         feature_extractor = tf.keras.Model(inputs=input_layer, outputs=x2)
         print("Feature extractor ready.")

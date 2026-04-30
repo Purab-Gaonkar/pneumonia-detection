@@ -5,7 +5,7 @@ from sklearn.ensemble import IsolationForest
 import numpy as np
 import joblib
 
-# Ensure TensorFlow uses GPU
+# Ensure TensorFlow uses GPU (DirectML will be picked up here)
 physical_devices = tf.config.list_physical_devices('GPU')
 if physical_devices:
     try:
@@ -17,13 +17,13 @@ if physical_devices:
 else:
     print("No GPU found. Training will run on CPU.")
 
-DATASET_DIR = "../dataset/chest_xray"
+DATASET_DIR = "chest_xray"
 TRAIN_DIR = os.path.join(DATASET_DIR, "train")
 VAL_DIR = os.path.join(DATASET_DIR, "val")
 MODELS_DIR = "models"
 os.makedirs(MODELS_DIR, exist_ok=True)
 
-BATCH_SIZE = 32
+BATCH_SIZE = 8
 IMG_SIZE = (224, 224)
 
 print("Loading datasets...")
@@ -54,32 +54,41 @@ train_dataset = train_dataset.map(lambda x, y: (data_augmentation(x, training=Tr
 train_dataset = train_dataset.prefetch(buffer_size=tf.data.AUTOTUNE)
 val_dataset = val_dataset.prefetch(buffer_size=tf.data.AUTOTUNE)
 
+
 print("Building Deep Learning Ensemble Model...")
 input_layer = tf.keras.Input(shape=(224, 224, 3))
-# Preprocessing functions
-preprocess_densenet = tf.keras.applications.densenet.preprocess_input(input_layer)
-preprocess_mobilenet = tf.keras.applications.mobilenet_v2.preprocess_input(input_layer)
-preprocess_resnet = tf.keras.applications.resnet_v2.preprocess_input(input_layer)
 
-# Model 1: DenseNet121
-densenet = tf.keras.applications.DenseNet121(weights='imagenet', include_top=False, input_tensor=preprocess_densenet)
+# --- Model 1: DenseNet121 ---
+# Preprocess and pass through DenseNet block
+preprocessed_1 = tf.keras.applications.densenet.preprocess_input(input_layer)
+densenet = tf.keras.applications.DenseNet121(weights='imagenet', include_top=False)
+densenet._name = 'densenet_block'
 densenet.trainable = False
-x1 = tf.keras.layers.GlobalAveragePooling2D()(densenet.output)
+x1 = densenet(preprocessed_1) # Call the model like a layer
+x1 = tf.keras.layers.GlobalAveragePooling2D()(x1)
 x1 = tf.keras.layers.Dropout(0.3)(x1)
 
-# Model 2: MobileNetV2
-mobilenet = tf.keras.applications.MobileNetV2(weights='imagenet', include_top=False, input_tensor=preprocess_mobilenet)
+# --- Model 2: MobileNetV2 ---
+# Preprocess and pass through MobileNet block
+preprocessed_2 = tf.keras.applications.mobilenet_v2.preprocess_input(input_layer)
+mobilenet = tf.keras.applications.MobileNetV2(weights='imagenet', include_top=False)
+mobilenet._name = 'mobilenet_block'
 mobilenet.trainable = False
-x2 = tf.keras.layers.GlobalAveragePooling2D()(mobilenet.output)
+x2 = mobilenet(preprocessed_2) 
+x2 = tf.keras.layers.GlobalAveragePooling2D()(x2)
 x2 = tf.keras.layers.Dropout(0.3)(x2)
 
-# Model 3: ResNet50V2
-resnet = tf.keras.applications.ResNet50V2(weights='imagenet', include_top=False, input_tensor=preprocess_resnet)
+# --- Model 3: ResNet50V2 ---
+# Preprocess and pass through ResNet block
+preprocessed_3 = tf.keras.applications.resnet_v2.preprocess_input(input_layer)
+resnet = tf.keras.applications.ResNet50V2(weights='imagenet', include_top=False)
+resnet._name = 'resnet_block'
 resnet.trainable = False
-x3 = tf.keras.layers.GlobalAveragePooling2D()(resnet.output)
+x3 = resnet(preprocessed_3) 
+x3 = tf.keras.layers.GlobalAveragePooling2D()(x3)
 x3 = tf.keras.layers.Dropout(0.3)(x3)
 
-# Combine features
+# Combine features from all three isolated models
 merged = tf.keras.layers.Concatenate()([x1, x2, x3])
 dense = tf.keras.layers.Dense(256, activation='relu')(merged)
 dense = tf.keras.layers.Dropout(0.4)(dense)
