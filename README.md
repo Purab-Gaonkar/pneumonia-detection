@@ -12,7 +12,7 @@ An advanced deep learning application for detecting pneumonia from chest X-ray i
 
 1. Clone the repository:
    ```bash
-   git clone <your-repo-url>
+   git clone https://github.com/Purab-Gaonkar/pneumonia-detection
    cd pneumonia_app
    ```
 
